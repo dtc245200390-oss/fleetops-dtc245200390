@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>FleetOps – Hệ thống Quản lý Đội xe (DTC245200390)</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a href="#view" class="skip">Bỏ qua điều hướng</a>
+
+<!-- MÀN HÌNH ĐĂNG NHẬP ĐIỀU ĐỘ -->
+<section id="login" class="login">
+  <div class="login-art">
+    <div class="login-badge">ĐỀ TÀI 30 · DTC245200390 · THÂN TUẤN LINH</div>
+    <div class="logo-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><use href="#i-truck"/></svg>
+    </div>
+    <h1>FleetOps</h1>
+    <p class="login-lead">Hệ thống Quản lý Đội xe, Điều phối Lịch trình, Tài xế và Bảo dưỡng Kỹ thuật tập trung.</p>
+    <ul class="art-list">
+      <li>Giám sát trạng thái phương tiện &amp; định mức công-tơ-mét (ODO) theo thời gian thực</li>
+      <li>Điều phối lịch trình vận chuyển, tự động cộng dồn km khi hoàn thành chuyến</li>
+      <li>Theo dõi kế hoạch bảo dưỡng định kỳ, đăng kiểm và quyết toán chi phí</li>
+      <li>Bảo mật hạ tầng với Nginx HTTPS, Prometheus, Grafana &amp; Loki LogQL</li>
+    </ul>
+    <div class="login-meta">
+      <span>Học phần: Triển khai và Quản trị Hệ thống Phần mềm</span>
+      <span>PostgreSQL 16 · Node.js 20 · Docker Compose</span>
+    </div>
+  </div>
+  <div class="login-pane">
+    <form id="lf" class="login-card" novalidate>
+      <div class="login-card-head">
+        <span class="pill-tag">TRUNG TÂM ĐIỀU ĐỘ VẬN TẢI</span>
+        <h2>Đăng nhập quản trị</h2>
+        <p class="sub">Sử dụng tài khoản điều độ viên được cấp để truy cập hệ thống.</p>
+      </div>
+      <label for="u">Tên đăng nhập
+        <input id="u" name="u" autocomplete="username" placeholder="Nhập tên đăng nhập (admin)" required autofocus>
+      </label>
+      <label for="p">Mật khẩu
+        <input id="p" name="p" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu quản trị" required>
+      </label>
+      <div id="err" class="err" role="alert" aria-live="assertive"></div>
+      <button class="btn primary lg" id="lb" type="submit">
+        <span>Đăng nhập hệ thống</span>
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-arrow-right"/></svg>
+      </button>
+    </form>
+  </div>
+</section>
+
+<!-- KHÔNG GIAN LÀM VIỆC CHÍNH (FLEET DISPATCH CONSOLE) -->
+<div id="main" class="layout" hidden>
+  <aside class="side">
+    <div class="brand">
+      <span class="brand-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-truck"/></svg></span>
+      <div>
+        <div class="brand-title">FleetOps</div>
+        <div class="brand-sub">Điều độ &amp; Quản lý Đội xe</div>
+      </div>
+    </div>
+    <div class="nav-group-label">PHÂN HỆ NGHIỆP VỤ</div>
+    <nav id="nav" aria-label="Điều hướng chính"></nav>
+    <div class="side-foot">
+      <div class="student-box">
+        <div class="student-label">SINH VIÊN THỰC HIỆN</div>
+        <div class="student-name">Thân Tuấn Linh</div>
+        <div class="student-id mono">MSSV: DTC245200390 · Đề 30</div>
+      </div>
+      <div class="user">
+        <span class="avatar" aria-hidden="true">TL</span>
+        <div>
+          <b id="who-user">Điều độ viên</b>
+          <small>Quản trị đội xe</small>
+        </div>
+      </div>
+      <button id="out" class="btn ghost-dark" type="button">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-logout"/></svg>
+        <span>Đăng xuất</span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <div>
+        <div class="breadcrumb" id="crumb">HỆ THỐNG QUẢN LÝ ĐỘI XE / FLEETOPS</div>
+        <h2 id="title"></h2>
+        <p id="subtitle" class="sub"></p>
+      </div>
+      <div class="tools">
+        <div class="search-wrap" id="search-box">
+          <svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg>
+          <input id="q" class="search" type="search" placeholder="Tìm biển số, tài xế, tuyến đường..." aria-label="Tìm kiếm">
+        </div>
+        <button id="add" class="btn primary" type="button">
+          <svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg>
+          <span id="addt">Thêm mới</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="filters" class="filter-bar" hidden></div>
+    <main id="view" tabindex="-1" aria-live="polite"></main>
+  </div>
+</div>
+
+<!-- MODAL THÊM / CẬP NHẬT BẢN GHI -->
+<div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mt">
+  <form id="mf" class="modal-box">
+    <div class="modal-head">
+      <div>
+        <span class="modal-eyebrow" id="me">BIỂU MẪU NGHIỆP VỤ</span>
+        <h3 id="mt"></h3>
+      </div>
+      <button type="button" id="mx" class="icon-btn" aria-label="Đóng">
+        <svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="mb" class="grid"></div>
+    <div class="actions">
+      <button type="button" id="mc" class="btn">Hủy bỏ</button>
+      <button class="btn primary" id="ms" type="submit">Lưu thông tin</button>
+    </div>
+  </form>
+</div>
+
+<!-- MODAL XÁC NHẬN XÓA -->
+<div id="confirm" class="modal" hidden role="alertdialog" aria-modal="true" aria-labelledby="ct">
+  <div class="modal-box sm">
+    <h3 id="ct">Xác nhận xóa dữ liệu</h3>
+    <p id="cm" class="sub"></p>
+    <div class="actions">
+      <button type="button" id="cn" class="btn">Hủy</button>
+      <button type="button" id="cy" class="btn danger-solid">Xác nhận xóa</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST THÔNG BÁO -->
+<div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+
+<!-- VECTOR SVG SPRITE (CHUẨN LUCIDE / HEROICONS STROKE) -->
+<svg class="sprite" width="0" height="0" aria-hidden="true"><defs>
+  <symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+    <path d="M15 18H9"/>
+    <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+    <circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>
+  </symbol>
+  <symbol id="i-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+    <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+    <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+    <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+  </symbol>
+  <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="6" cy="19" r="3"/>
+    <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>
+    <circle cx="18" cy="5" r="3"/>
+  </symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m12 14 4-4"/>
+    <path d="M3.34 19a10 10 0 1 1 17.32 0"/>
+  </symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <path d="M12 9v4"/><path d="M12 17h.01"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 6 9 17l-5-5"/>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="6 3 20 12 6 21 6 3"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M6 6l12 12M18 6L6 18"/>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20h4L19 9l-4-4L4 16z"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>
+  </symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>
+  </symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+  </symbol>
+</defs></svg>
+
+<script src="app.js"></script>
+</body>
+</html>

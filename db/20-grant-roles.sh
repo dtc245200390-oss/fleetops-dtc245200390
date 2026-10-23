@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+psql -X -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -v appuser="$APP_DB_USER" <<'SQL'
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'appuser') \gexec
+GRANT USAGE ON SCHEMA public TO :"appuser";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"appuser";
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO :"appuser";
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"appuser";
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO :"appuser";
+SQL

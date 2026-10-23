@@ -1,0 +1,4 @@
+.env
+nginx/certs/*.key
+nginx/certs/*.crt
+node_modules/
