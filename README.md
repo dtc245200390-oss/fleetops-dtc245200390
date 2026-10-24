@@ -7,6 +7,7 @@ Báo cáo Bài tập lớn học phần **Triển khai và Quản trị Hệ th�
 - **Ngày sinh:** 10/07/2006
 - **Lớp / Khóa:** CNTT K23C
 - **Đề tài:** Đề 30 – Hệ thống Quản lý Đội xe / Fleet (FleetOps)
+- **Kho mã nguồn GitHub:** <https://github.com/dtc245200390-oss/fleetops-dtc245200390>
 
 Hệ thống quản lý phương tiện đội xe, điều phối lịch trình vận chuyển, hồ sơ tài xế và kế hoạch bảo dưỡng kỹ thuật được đóng gói toàn bộ bằng **Docker Compose**, bảo vệ bởi **Nginx Reverse Proxy (HTTPS/TLS + Security Headers + Rate Limiting)**, giám sát tài nguyên với **Prometheus + Grafana**, thu thập và truy vấn nhật ký tập trung bằng **Loki + Promtail (LogQL)**, tự động phát hiện tấn công dò mật khẩu qua **Grafana Alerting** và áp dụng đầy đủ 8 biện pháp **Hardening** theo tiêu chuẩn bảo mật.
 
@@ -99,8 +100,8 @@ Hệ thống quản lý phương tiện đội xe, điều phối lịch trình 
 
 ### Bước 1: Clone kho mã nguồn
 ```bash
-git clone https://github.com/DTC245200390/DTC245200390.git
-cd DTC245200390
+git clone https://github.com/dtc245200390-oss/fleetops-dtc245200390.git
+cd fleetops-dtc245200390
 ```
 
 ### Bước 2: Khởi tạo biến môi trường `.env` và chứng chỉ số SSL/TLS tự ký
