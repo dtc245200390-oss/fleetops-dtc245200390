@@ -79,16 +79,18 @@ Hệ thống quản lý phương tiện đội xe, điều phối lịch trình 
 │   ├── dashboards/fleetops-security.json # Dashboard chuyên sâu Nhật ký & An toàn thông tin
 │   └── provisioning/                   # Tự động nạp Datasources (Prometheus, Loki), Dashboards và Alert Rule
 ├── scripts/
-│   ├── gen-env.sh                      # Sinh file .env với mật khẩu mạnh ngẫu nhiên và phân quyền 600
-│   ├── gen-cert.sh                     # Sinh chứng chỉ TLS tự ký RSA 2048-bit kèm SAN localhost/127.0.0.1
-│   ├── attack-sim.sh                   # Script mô phỏng tấn công Brute-force vào /api/login
-│   └── verify-hardening.sh             # Script kiểm tra tự động 8 hạng mục Hardening (Bước 6)
+│   ├── bootstrap-ubuntu.sh              # Cài Docker Engine + Compose plugin, cấu hình UFW cho VM Ubuntu
+│   ├── deploy-ubuntu.sh                 # Triển khai 1 lệnh trên VM: .env → TLS cert → build → health check
+│   ├── gen-env.sh                       # Sinh file .env với mật khẩu mạnh ngẫu nhiên và phân quyền 600
+│   ├── gen-cert.sh                      # Sinh chứng chỉ TLS tự ký RSA 2048-bit, SAN gồm localhost + IP của VM
+│   ├── attack-sim.sh                    # Script mô phỏng tấn công Brute-force vào /api/login
+│   └── verify-hardening.sh              # Script kiểm tra tự động 8 hạng mục Hardening (Bước 6)
 ├── tests/
 │   ├── smoke_api.sh                    # Kiểm thử tự động toàn bộ luồng đăng nhập & CRUD 4 bảng đội xe
 │   └── check_logql.sh                  # Kiểm thử tự động luồng Promtail -> Loki -> Grafana Alerting
 ├── .env.example                        # Mẫu cấu hình biến môi trường (không chứa mật khẩu thật)
 ├── .gitignore                          # Loại trừ .env, *.key, *.crt, node_modules khỏi Git
-└── docker-compose.yml                  # Định nghĩa toàn bộ 10 containers, 3 networks và 5 persistent volumes
+└── docker-compose.yml                  # Định nghĩa toàn bộ 11 containers, 3 networks và 5 persistent volumes
 ```
 
 ---
@@ -122,6 +124,58 @@ docker compose ps
 | **Prometheus (Targets & Metrics)** | `http://localhost:9090` *(chỉ lắng nghe `127.0.0.1`)* | Truy cập nội bộ tại `127.0.0.1` |
 
 *(Server `FleetOps – Quản lý Đội xe (PostgreSQL 16)` đã được nạp tự động trong pgAdmin 4 với Host: `db`, Port: `5432`, Database: `fleetops`, Username: `postgres`, Password: giá trị `DB_ADMIN_PASSWORD` trong `.env`).*
+
+### Bước 5: Triển khai trên VM Ubuntu 22.04 / 24.04
+
+Yêu cầu VM: **2 vCPU, tối thiểu 4 GB RAM (khuyến nghị 6 GB), ≥ 20 GB ổ đĩa**, có Internet để tải Docker images. Nếu chưa có mã nguồn trên VM, hãy `git clone` repository hoặc dùng `scp`/WinSCP chép thư mục dự án lên VM trước khi chạy các bước dưới.
+
+**5.1. Cài Docker Engine + Compose plugin và mở firewall (chạy 1 lần)**
+```bash
+bash scripts/bootstrap-ubuntu.sh
+# Script thêm user vào group docker -> đăng xuất/đăng nhập lại SSH, hoặc chạy:
+newgrp docker
+sudo ufw enable        # chỉ bật nếu UFW chưa active; script đã mở sẵn cổng 22/80/443
+```
+
+**5.2. Triển khai toàn bộ hệ thống bằng 1 lệnh**
+```bash
+bash scripts/deploy-ubuntu.sh
+```
+
+Script tự động thực hiện:
+- Kiểm tra Docker, RAM, dung lượng đĩa và cổng `80/443` có bị chiếm không;
+- Sinh `.env` với mật khẩu mạnh ngẫu nhiên (quyền `600`) nếu chưa có;
+- Sinh chứng chỉ TLS tự ký với **SAN gồm IP LAN của VM**, nhờ đó `https://<IP-VM>` không báo sai tên;
+- Đồng bộ `NGINX_UID/GID` trong `.env` theo chủ sở hữu `nginx/certs/server.key` để container nginx non-root đọc được khóa `600`;
+- Chạy `docker compose up -d --build`, chờ web trả `HTTP 200` rồi in bảng địa chỉ và tài khoản truy cập.
+
+**5.3. Truy cập từ máy host**
+- Website: `https://<IP-VM>/` (chấp nhận cảnh báo chứng chỉ tự ký) hoặc `http://<IP-VM>/` → tự chuyển `301` sang HTTPS.
+- Grafana / Prometheus / pgAdmin chỉ lắng nghe `127.0.0.1` trên VM. Mở SSH tunnel từ máy host:
+```bash
+ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 5050:127.0.0.1:5050 <user>@<IP-VM>
+```
+Sau đó mở `http://localhost:3000`, `http://localhost:9090`, `http://localhost:5050` trên máy host.
+
+**5.4. Kiểm thử sau triển khai**
+```bash
+bash tests/smoke_api.sh https://localhost
+bash scripts/verify-hardening.sh
+sh ./scripts/attack-sim.sh https://localhost
+```
+
+**5.5. Xử lý sự cố thường gặp**
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| `permission denied ... docker.sock` | Chạy `newgrp docker` hoặc đăng xuất/đăng nhập lại SSH |
+| `port is already allocated` (80/443) | `sudo ss -ltnp 'sport = :80'` → dừng `apache2`/`nginx` hệ thống đang chiếm cổng |
+| Web trả `502 Bad Gateway` | `docker compose logs --tail=100 webapp nginx`; chờ `fleetops-db` healthy |
+| Trình duyệt cảnh báo chứng chỉ | Bình thường với chứng chỉ tự ký; kiểm tra SAN: `openssl x509 -in nginx/certs/server.crt -noout -ext subjectAltName` |
+| VM đổi IP nên chứng chỉ sai tên | `FORCE_CERT=1 bash scripts/gen-cert.sh && docker compose restart nginx` |
+| Container bị kill do thiếu RAM | Tăng RAM VM lên ≥ 4 GB; theo dõi bằng `docker stats` |
+| Muốn triển khai lại từ đầu | `docker compose down -v` (CẢNH BÁO: xóa toàn bộ dữ liệu PostgreSQL, Grafana, Loki) |
+
 
 ---
 
@@ -163,7 +217,7 @@ sh ./scripts/attack-sim.sh https://localhost
 sh ./scripts/verify-hardening.sh
 ```
 Script tự động xác minh 8 hạng mục bảo mật:
-1. **Non-root Container User:** `fleetops-webapp` chạy dưới quyền user `node` (`UID 1000`), `fleetops-nginx` chạy dưới quyền `nginx-unprivileged` (`UID 101`).
+1. **Non-root Container User:** `fleetops-webapp` chạy dưới quyền user `node` (`UID 1000`), `fleetops-nginx` chạy dưới quyền user non-root `NGINX_UID` trong `.env` (`101` trên Docker Desktop, thường `1000` trên VM Ubuntu – trùng chủ sở hữu khóa TLS).
 2. **Read-only Root Filesystem & Capability Drop:** `read_only: true`, `cap_drop: [ALL]`, `security_opt: ["no-new-privileges:true"]`.
 3. **Network Isolation:** CSDL `fleetops-db` nằm trong mạng `backend` (`internal: true`), không mở cổng `5432` ra máy chủ host.
 4. **Least-Privilege Database Roles:** Ứng dụng kết nối bằng `fleet_app` (chỉ có quyền `SELECT, INSERT, UPDATE, DELETE`), Exporter kết nối bằng `fleet_monitor` (`pg_monitor`), không dùng tài khoản quản trị `postgres`.
