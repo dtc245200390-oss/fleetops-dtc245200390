@@ -125,7 +125,7 @@ docker compose ps
 
 *(Server `FleetOps – Quản lý Đội xe (PostgreSQL 16)` đã được nạp tự động trong pgAdmin 4 với Host: `db`, Port: `5432`, Database: `fleetops`, Username: `postgres`, Password: giá trị `DB_ADMIN_PASSWORD` trong `.env`).*
 
-### Bước 5: Triển khai trên VM Ubuntu 22.04 / 24.04
+### Bước 5: Triển khai trên VM Ubuntu 20.04 / 22.04 / 24.04
 
 Yêu cầu VM: **2 vCPU, tối thiểu 4 GB RAM (khuyến nghị 6 GB), ≥ 20 GB ổ đĩa**, có Internet để tải Docker images. Nếu chưa có mã nguồn trên VM, hãy `git clone` repository hoặc dùng `scp`/WinSCP chép thư mục dự án lên VM trước khi chạy các bước dưới.
 
@@ -225,3 +225,36 @@ Script tự động xác minh 8 hạng mục bảo mật:
 6. **HTTP Security Headers:** Đầy đủ `Strict-Transport-Security`, `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, ẩn phiên bản bằng `server_tokens off`.
 7. **Ẩn đường dẫn nội bộ:** Nginx trả về `HTTP 404` đối với mọi truy cập từ bên ngoài vào `/metrics` và `/internal`.
 8. **Giới hạn tài nguyên (Resource Limits):** Thiết lập `mem_limit`, `cpus`, `pids_limit` cho các dịch vụ nhằm chống tấn công cạn kiệt tài nguyên (DoS/Fork bomb).
+
+---
+
+## 5. Minh chứng triển khai thực tế trên VM Ubuntu
+
+Hệ thống đã được triển khai bằng Docker Compose trên VM **Ubuntu 20.04.6 LTS** tại địa chỉ `https://192.168.1.9/` (chứng chỉ TLS tự ký, có SAN cho IP LAN). Toàn bộ 11 container đều ở trạng thái `running/healthy`.
+
+Ảnh minh chứng được lưu trong thư mục [`docs/screenshots`](docs/screenshots):
+
+| # | Ảnh | Nội dung |
+|---|-----|----------|
+| 1 | [01-fleetops-dashboard.png](docs/screenshots/01-fleetops-dashboard.png) | Giao diện FleetOps sau đăng nhập: 6 xe, 3 chuyến, 5 tài xế và giám sát định mức ODO |
+| 2 | [02-grafana-overview.png](docs/screenshots/02-grafana-overview.png) | Dashboard Grafana “Giám sát hệ thống”: CPU/RAM 11 container, Nginx, PostgreSQL, webapp và log |
+| 3 | [03-grafana-security.png](docs/screenshots/03-grafana-security.png) | Dashboard “Nhật ký & An toàn thông tin”: 16 lần `LOGIN_FAILED`, 26 request bị chặn `429`, 6 cảnh báo webhook |
+| 4 | [04-grafana-alert-firing.png](docs/screenshots/04-grafana-alert-firing.png) | Quy tắc `bruteforce-login` đang **Firing**, giá trị 7 vượt ngưỡng 5 |
+| 5 | [05-grafana-explore-logql.png](docs/screenshots/05-grafana-explore-logql.png) | Grafana Explore truy vấn `{job="webapp"} |= "LOGIN_FAILED"` (52 dòng log) |
+| 6 | [06-prometheus-targets.png](docs/screenshots/06-prometheus-targets.png) | Prometheus `/targets`: 5/5 job ở trạng thái **UP** |
+| 7 | [07-pgadmin-tree.png](docs/screenshots/07-pgadmin-tree.png) | pgAdmin kết nối PostgreSQL, cây database `fleetops` với 4 bảng nghiệp vụ |
+| 8 | [08-pgadmin-vehicles.png](docs/screenshots/08-pgadmin-vehicles.png) | Query Tool: `SELECT * FROM public.vehicles ORDER BY id ASC` trả về 6 dòng dữ liệu thật |
+
+### Kết quả kiểm thử tự động
+
+| Hạng mục | Lệnh kiểm thử | Kết quả |
+|---|---|---|
+| API nghiệp vụ | `bash tests/smoke_api.sh https://localhost` | **PASS** – đăng nhập, CRUD 4 bảng, đồng bộ ODO, thống kê |
+| Hardening | `bash scripts/verify-hardening.sh` | **8/8 PASS** |
+| Rate limit | `sh scripts/attack-sim.sh https://localhost` | 7 request `HTTP 401`, sau đó chuyển `HTTP 429` |
+| LogQL + Alerting | `bash tests/check_logql.sh https://localhost` | **PASS** – 9 log `LOGIN_FAILED`, 34 log Nginx `POST /api/login`, webhook `ALERT_RECEIVED` |
+| Prometheus targets | `GET /api/v1/targets` | 5/5 target **UP** (prometheus, webapp, cadvisor, nginx, postgres) |
+| HTTPS & headers | `curl -kI https://192.168.1.9/` | `HTTP 200`, đầy đủ HSTS, CSP, X-Frame-Options, Referrer-Policy… |
+| Chuyển hướng HTTP | `curl -I http://192.168.1.9/` | `301` → `https://192.168.1.9/` |
+
+> Ghi chú: các ảnh Grafana/Prometheus/pgAdmin được chụp qua SSH tunnel `-L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 5050:127.0.0.1:5050`, vì các dịch vụ này chỉ lắng nghe trên `127.0.0.1` của VM.
